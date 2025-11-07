@@ -59,6 +59,12 @@ async function run() {
           .send({ message: "Failed to delete", error: err.message });
       }
     });
+    app.get("/parcels/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await parcelsCollections.findOne(query);
+      res.send(result);
+    });
     // deploy to comment this
     await client.connect();
     await client.db("admin").command({ ping: 1 });
