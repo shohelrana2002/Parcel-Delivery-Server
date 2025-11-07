@@ -20,6 +20,7 @@ const client = new MongoClient(uri, {
   },
 });
 const parcelsCollections = client.db("Parcels").collection("SendParcels");
+const paymentCollections = client.db("Parcels").collection("Payments");
 
 async function run() {
   try {
@@ -84,7 +85,48 @@ async function run() {
         res.status(500).send({ error: error.message });
       }
     });
+    app.get("/payments", async (req, res) => {
+      const userEmail = req.query.email;
+      const query = userEmail ? { email: userEmail } : {};
+      const options = {
+        sort: {
+          paid_at_string: -1,
+        },
+      };
+      const result = await paymentCollections.find(query, options).toArray();
+      res.send(result);
+    });
+    app.post("/payments", async (req, res) => {
+      try {
+        const { parcelId, email, amount, paymentMethod, transitionId } =
+          req.body;
+        const updateResult = await parcelsCollections.updateOne(
+          { _id: new ObjectId(parcelId) },
+          { $set: { payment_status: "paid" } }
+        );
+        if (updateResult.modifiedCount === 0) {
+          return res
+            .status(500)
+            .send({ message: "Parcel not found or already paid" });
+        }
 
+        const paymentDoc = {
+          parcelId,
+          email,
+          paymentMethod,
+          amount,
+          transitionId,
+          paid_at_string: new Date().toISOString(),
+          paid_at: new Date(),
+        };
+        const paymentResult = await paymentCollections.insertOne(paymentDoc);
+        res.send(paymentResult);
+      } catch (error) {
+        res
+          .status(500)
+          .send({ message: "cant found data", error: error.message });
+      }
+    });
     // deploy to comment this
     await client.connect();
     await client.db("admin").command({ ping: 1 });
