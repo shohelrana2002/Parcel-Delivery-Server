@@ -21,9 +21,12 @@ const client = new MongoClient(uri, {
 });
 const parcelsCollections = client.db("Parcels").collection("SendParcels");
 const paymentCollections = client.db("Parcels").collection("Payments");
+const trackingCollections = client.db("Parcels").collection("Trackings");
 
 async function run() {
   try {
+    // parcel data start here
+    // parcel post route
     app.post("/parcels", async (req, res) => {
       try {
         const data = req.body;
@@ -37,6 +40,8 @@ async function run() {
     //   const result = await parcelsCollections.find().toArray();
     //   res.send(result);
     // });
+
+    // parcel get by email query
     app.get("/parcels", async (req, res) => {
       const email = req.query.email;
       // const query = email ? { created_by: email } : {};
@@ -49,6 +54,7 @@ async function run() {
       const result = await parcelsCollections.find(query, option).toArray();
       res.send(result);
     });
+    // parcel delete by id params
     app.delete("/parcels/:id", async (req, res) => {
       try {
         const id = req.params.id;
@@ -61,13 +67,14 @@ async function run() {
           .send({ message: "Failed to delete", error: err.message });
       }
     });
+    // parcel payment page a get a single data
     app.get("/parcels/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await parcelsCollections.findOne(query);
       res.send(result);
     });
-
+    // parcel payment
     app.post("/create-payment-intent", async (req, res) => {
       try {
         const { amount } = req.body;
@@ -85,6 +92,7 @@ async function run() {
         res.status(500).send({ error: error.message });
       }
     });
+    // payments data get
     app.get("/payments", async (req, res) => {
       const userEmail = req.query.email;
       const query = userEmail ? { email: userEmail } : {};
@@ -96,6 +104,7 @@ async function run() {
       const result = await paymentCollections.find(query, options).toArray();
       res.send(result);
     });
+    // parcel payment data post
     app.post("/payments", async (req, res) => {
       try {
         const { parcelId, email, amount, paymentMethod, transitionId } =
@@ -126,6 +135,27 @@ async function run() {
           .status(500)
           .send({ message: "cant found data", error: error.message });
       }
+    });
+    // parcel data end
+    //  tracking post route
+    app.post("/tracking", async (req, res) => {
+      const {
+        parcel_id,
+        tracking_id,
+        status,
+        message,
+        updated_by = "",
+      } = req.body;
+      const updatedDoc = {
+        tracking_id,
+        parcel_id: parcel_id ? new ObjectId(parcel_id) : undefined,
+        status,
+        message,
+        time: new Date().toISOString(),
+        updated_by,
+      };
+      const result = await trackingCollections.insertOne(updatedDoc);
+      res.send(result);
     });
     // deploy to comment this
     await client.connect();
