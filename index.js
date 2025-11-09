@@ -2,12 +2,20 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const Stripe = require("stripe");
+const admin = require("firebase-admin");
 const port = process.env.PORT || 3000;
 require("dotenv").config();
 
 // middle were
 app.use(cors());
 app.use(express.json());
+
+const serviceAccount = require("./firebase-secret-token.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.6zoig.mongodb.net/?appName=Cluster0`;
@@ -22,9 +30,56 @@ const client = new MongoClient(uri, {
 const parcelsCollections = client.db("Parcels").collection("SendParcels");
 const paymentCollections = client.db("Parcels").collection("Payments");
 const trackingCollections = client.db("Parcels").collection("Trackings");
+const usersCollections = client.db("Parcels").collection("Users");
+const ridersCollections = client.db("Parcels").collection("Riders");
+// middle were
+const verifyFirebaseToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).send({ message: "unauthorized" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized" });
+  }
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.decoded = decoded;
+    next();
+  } catch (error) {
+    res.status(403).send({ message: "Forbidden access", error: error.message });
+  }
+};
 
+const emailVerify = (req, res, next) => {
+  const decodedEmail = req.decoded.email;
+  const requestedEmail = req.query.email;
+  if (!decodedEmail || decodedEmail !== requestedEmail) {
+    return res.status(403).send({ message: "Forbidden: Email mismatch" });
+  }
+  next();
+};
 async function run() {
   try {
+    // user post route
+    app.post("/users", async (req, res) => {
+      const email = req.body.email;
+      const existingUser = await usersCollections.findOne({ email });
+      const now = new Date().toISOString();
+      if (existingUser) {
+        const updateRes = await usersCollections.updateOne(
+          { email },
+          { $set: { last_login_at: now } }
+        );
+        return res
+          .status(200)
+          .send({ message: "User exists, last_login_at updated", updateRes });
+      }
+
+      const user = req.body;
+      const result = await usersCollections.insertOne(user);
+      res.send(result);
+    });
     // parcel data start here
     // parcel post route
     app.post("/parcels", async (req, res) => {
@@ -42,7 +97,7 @@ async function run() {
     // });
 
     // parcel get by email query
-    app.get("/parcels", async (req, res) => {
+    app.get("/parcels", verifyFirebaseToken, async (req, res) => {
       const email = req.query.email;
       // const query = email ? { created_by: email } : {};
       const query = { created_by: email };
@@ -93,7 +148,7 @@ async function run() {
       }
     });
     // payments data get
-    app.get("/payments", async (req, res) => {
+    app.get("/payments", verifyFirebaseToken, emailVerify, async (req, res) => {
       const userEmail = req.query.email;
       const query = userEmail ? { email: userEmail } : {};
       const options = {
@@ -155,6 +210,50 @@ async function run() {
         updated_by,
       };
       const result = await trackingCollections.insertOne(updatedDoc);
+      res.send(result);
+    });
+    // riders route
+    app.get("/riders/pending", async (req, res) => {
+      const result = await ridersCollections
+        .find({ status: "pending" })
+        .toArray();
+      res.send(result);
+    });
+    app.get("/riders/active", async (req, res) => {
+      const result = await ridersCollections
+        .find({ status: "active" })
+        .toArray();
+      res.send(result);
+    });
+    app.patch("/riders/:id", async (req, res) => {
+      const id = req.params.id;
+      const { status } = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          status: status,
+        },
+      };
+      const result = await ridersCollections.updateOne(query, updateDoc);
+      res.send(result);
+    });
+    app.delete("/riders/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await ridersCollections.deleteOne(query);
+      res.send(result);
+    });
+    // rider post
+    app.post("/riders", async (req, res) => {
+      const data = req.body;
+      const email = data.email;
+      const existingUser = await ridersCollections.findOne({ email });
+      if (existingUser) {
+        return res
+          .status(400)
+          .send({ message: "You have already applied!", applied: true });
+      }
+      const result = await ridersCollections.insertOne(data);
       res.send(result);
     });
     // deploy to comment this
