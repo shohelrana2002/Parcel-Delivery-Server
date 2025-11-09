@@ -227,13 +227,26 @@ async function run() {
     });
     app.patch("/riders/:id", async (req, res) => {
       const id = req.params.id;
-      const { status } = req.body;
+      const { status, email } = req.body;
       const query = { _id: new ObjectId(id) };
       const updateDoc = {
         $set: {
           status: status,
         },
       };
+      if (status === "active" && email) {
+        const queryRole = { email };
+        const updatedRole = {
+          $set: {
+            role: "rider",
+          },
+        };
+        const roleResult = await usersCollections.updateOne(
+          queryRole,
+          updatedRole
+        );
+        res.send(console.log(roleResult));
+      }
       const result = await ridersCollections.updateOne(query, updateDoc);
       res.send(result);
     });
