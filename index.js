@@ -50,7 +50,20 @@ const verifyFirebaseToken = async (req, res, next) => {
     res.status(403).send({ message: "Forbidden access", error: error.message });
   }
 };
+const verifyAdmin = async (req, res, next) => {
+  try {
+    const requesterEmail = req.decoded.email;
+    const user = await usersCollections.findOne({ email: requesterEmail });
 
+    if (!user || user.role !== "admin") {
+      return res.status(403).send({ message: "Forbidden: Admins only" });
+    }
+
+    next();
+  } catch (err) {
+    res.status(500).send({ message: "Server error", error: err.message });
+  }
+};
 const emailVerify = (req, res, next) => {
   const decodedEmail = req.decoded.email;
   const requestedEmail = req.query.email;
@@ -143,7 +156,6 @@ async function run() {
           clientSecret: paymentIntent.client_secret,
         });
       } catch (error) {
-        console.error(error);
         res.status(500).send({ error: error.message });
       }
     });
@@ -212,6 +224,75 @@ async function run() {
       const result = await trackingCollections.insertOne(updatedDoc);
       res.send(result);
     });
+    // admin routes
+    app.get(
+      "/users/search",
+      verifyFirebaseToken,
+      verifyAdmin,
+      async (req, res) => {
+        const email = req.query.email;
+        if (!email) {
+          res.status(401).send({ message: "Missing email query" });
+        }
+        const regex = new RegExp(email, "i");
+        const users = await usersCollections
+          .find({ email: { $regex: regex } })
+          .limit(10)
+          .toArray();
+        res.send(users);
+      }
+    );
+
+    app.patch(
+      "/admin/update/role/:id",
+      verifyFirebaseToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const { role, requesterEmail } = req.body;
+          const targetUser = await usersCollections.findOne({
+            _id: new ObjectId(id),
+          });
+          if (!targetUser) {
+            return res.status(404).send({ message: "User not found" });
+          }
+          if (targetUser.email === requesterEmail.email) {
+            return res
+              .status(400)
+              .send({ message: "You cannot change your own role" });
+          }
+
+          // Update the role
+          const result = await usersCollections.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { role } }
+          );
+
+          res.send({
+            success: true,
+            message: `Role updated to ${role} successfully`,
+            result,
+          });
+        } catch (err) {
+          res.status(500).send({ message: "Server Error", error: err.message });
+        }
+      }
+    );
+
+    // app.patch("/admin/update/role/:id", async (req, res) => {
+    //   const id = req.params.id;
+    //   const { role } = req.body;
+    //   const query = { _id: new ObjectId(id) };
+    //   const updateDoc = {
+    //     $set: {
+    //       role,
+    //     },
+    //   };
+    //   const result = await usersCollections.updateOne(query, updateDoc);
+
+    //   res.send(result);
+    // });
     // riders route
     app.get("/riders/pending", async (req, res) => {
       const result = await ridersCollections
@@ -241,11 +322,7 @@ async function run() {
             role: "rider",
           },
         };
-        const roleResult = await usersCollections.updateOne(
-          queryRole,
-          updatedRole
-        );
-        res.send(console.log(roleResult));
+        await usersCollections.updateOne(queryRole, updatedRole);
       }
       const result = await ridersCollections.updateOne(query, updateDoc);
       res.send(result);
