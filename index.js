@@ -104,6 +104,7 @@ async function run() {
         res.status(500).send({ message: "not found", error: err });
       }
     });
+
     // app.get("/parcels", async (req, res) => {
     //   const result = await parcelsCollections.find().toArray();
     //   res.send(result);
@@ -345,6 +346,22 @@ async function run() {
       }
       const result = await ridersCollections.insertOne(data);
       res.send(result);
+    });
+    // get user
+    app.get("/users/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const user = await usersCollections.findOne({ email });
+
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        res.send(user);
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: "Server Error", error: err.message });
+      }
     });
     // deploy to comment this
     await client.connect();
