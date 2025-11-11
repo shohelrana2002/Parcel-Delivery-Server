@@ -52,8 +52,9 @@ const verifyFirebaseToken = async (req, res, next) => {
 };
 const verifyAdmin = async (req, res, next) => {
   try {
-    const requesterEmail = req.decoded.email;
-    const user = await usersCollections.findOne({ email: requesterEmail });
+    const email = req.decoded.email;
+    const query = { email };
+    const user = await usersCollections.findOne(query);
 
     if (!user || user.role !== "admin") {
       return res.status(403).send({ message: "Forbidden: Admins only" });
@@ -74,6 +75,19 @@ const emailVerify = (req, res, next) => {
 };
 async function run() {
   try {
+    app.get("/users", async (req, res) => {
+      try {
+        const { status } = req.query;
+        const query = {};
+        if (status) query.status = status;
+        const riders = await ridersCollections.find(query).toArray();
+        res.send(riders);
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: "Server error", error: err.message });
+      }
+    });
+
     // user post route
     app.post("/users", async (req, res) => {
       const email = req.body.email;
@@ -110,19 +124,25 @@ async function run() {
     //   res.send(result);
     // });
 
-    // parcel get by email query
     app.get("/parcels", verifyFirebaseToken, async (req, res) => {
-      const email = req.query.email;
-      // const query = email ? { created_by: email } : {};
-      const query = { created_by: email };
-      const option = {
-        sort: {
-          creation_date: -1,
-        },
-      };
-      const result = await parcelsCollections.find(query, option).toArray();
-      res.send(result);
+      try {
+        const { payment_status, delivery_status, email } = req.query;
+        const query = {};
+
+        if (payment_status) query.payment_status = payment_status;
+        if (delivery_status) query.delivery_status = delivery_status;
+        if (email) query.created_by = email;
+
+        const options = { sort: { creation_date: -1 } };
+
+        const parcels = await parcelsCollections.find(query, options).toArray();
+        res.send(parcels);
+      } catch (error) {
+        console.error("Error fetching parcels:", error);
+        res.status(500).send({ message: "Server error", error: error.message });
+      }
     });
+
     // parcel delete by id params
     app.delete("/parcels/:id", async (req, res) => {
       try {
@@ -295,45 +315,65 @@ async function run() {
     //   res.send(result);
     // });
     // riders route
-    app.get("/riders/pending", async (req, res) => {
-      const result = await ridersCollections
-        .find({ status: "pending" })
-        .toArray();
-      res.send(result);
-    });
-    app.get("/riders/active", async (req, res) => {
-      const result = await ridersCollections
-        .find({ status: "active" })
-        .toArray();
-      res.send(result);
-    });
-    app.patch("/riders/:id", async (req, res) => {
-      const id = req.params.id;
-      const { status, email } = req.body;
-      const query = { _id: new ObjectId(id) };
-      const updateDoc = {
-        $set: {
-          status: status,
-        },
-      };
-      if (status === "active" && email) {
-        const queryRole = { email };
-        const updatedRole = {
+    app.get(
+      "/riders/pending",
+      verifyFirebaseToken,
+      verifyAdmin,
+      async (req, res) => {
+        const result = await ridersCollections
+          .find({ status: "pending" })
+          .toArray();
+        res.send(result);
+      }
+    );
+    app.get(
+      "/riders/active",
+      verifyFirebaseToken,
+      verifyAdmin,
+      async (req, res) => {
+        const result = await ridersCollections
+          .find({ status: "active" })
+          .toArray();
+        res.send(result);
+      }
+    );
+    app.patch(
+      "/riders/:id",
+      verifyFirebaseToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const { status, email } = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
           $set: {
-            role: "rider",
+            status: status,
           },
         };
-        await usersCollections.updateOne(queryRole, updatedRole);
+        if (status === "active" && email) {
+          const queryRole = { email };
+          const updatedRole = {
+            $set: {
+              role: "rider",
+            },
+          };
+          await usersCollections.updateOne(queryRole, updatedRole);
+        }
+        const result = await ridersCollections.updateOne(query, updateDoc);
+        res.send(result);
       }
-      const result = await ridersCollections.updateOne(query, updateDoc);
-      res.send(result);
-    });
-    app.delete("/riders/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const result = await ridersCollections.deleteOne(query);
-      res.send(result);
-    });
+    );
+    app.delete(
+      "/riders/:id",
+      verifyFirebaseToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await ridersCollections.deleteOne(query);
+        res.send(result);
+      }
+    );
     // rider post
     app.post("/riders", async (req, res) => {
       const data = req.body;
@@ -363,6 +403,31 @@ async function run() {
         res.status(500).send({ message: "Server Error", error: err.message });
       }
     });
+    // test
+    app.patch("/parcels/assign/:id", async (req, res) => {
+      const id = req.params.id;
+      const {
+        assigned_rider,
+        delivery_status,
+        assigned_rider_id,
+        assigned_rider_name,
+      } = req.body;
+      const result = await parcelsCollections.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            assigned_rider,
+            delivery_status,
+            assigned_rider_id,
+            assigned_rider_name,
+            assigned_date: new Date(),
+          },
+        }
+      );
+      console.log(result);
+      res.send(result);
+    });
+
     // deploy to comment this
     await client.connect();
     await client.db("admin").command({ ping: 1 });
