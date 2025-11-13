@@ -75,6 +75,19 @@ const emailVerify = (req, res, next) => {
 };
 async function run() {
   try {
+    app.get("/rider/parcels", async (req, res) => {
+      const email = req.query.email;
+      const query = {
+        assigned_rider: email,
+        delivery_status: { $in: ["assigned", "picked_up", "delivered"] },
+      };
+
+      const options = { sort: { creation_date: -1 } };
+      const result = await parcelsCollections.find(query, options).toArray();
+
+      console.log("📦 Found Parcels:", result.length);
+      res.send(result);
+    });
     app.get("/users", async (req, res) => {
       try {
         const { status } = req.query;
@@ -128,7 +141,6 @@ async function run() {
       try {
         const { payment_status, delivery_status, email } = req.query;
         const query = {};
-
         if (payment_status) query.payment_status = payment_status;
         if (delivery_status) query.delivery_status = delivery_status;
         if (email) query.created_by = email;
@@ -138,7 +150,6 @@ async function run() {
         const parcels = await parcelsCollections.find(query, options).toArray();
         res.send(parcels);
       } catch (error) {
-        console.error("Error fetching parcels:", error);
         res.status(500).send({ message: "Server error", error: error.message });
       }
     });
@@ -156,6 +167,71 @@ async function run() {
           .send({ message: "Failed to delete", error: err.message });
       }
     });
+    // app.patch("/parcels/assign/:id", async (req, res) => {
+    //   const id = req.params.id;
+    //   const {
+    //     assigned_rider,
+    //     delivery_status,
+    //     assigned_rider_id,
+    //     assigned_rider_name,
+    //   } = req.body;
+    //   const result = await parcelsCollections.updateOne(
+    //     { _id: new ObjectId(id) },
+    //     {
+    //       $set: {
+    //         assigned_rider,
+    //         delivery_status,
+    //         assigned_rider_id,
+    //         assigned_rider_name,
+    //         assigned_date: new Date(),
+    //       },
+    //     }
+    //   );
+
+    //   res.send(result);
+    // });
+    app.patch("/parcels/assign/statusUpdate/:id", async (req, res) => {
+      const id = req.params.id;
+      const { delivery_status } = req.body;
+
+      const updateDoc = {
+        $set: {
+          delivery_status,
+          assigned_date: new Date().toISOString(),
+        },
+      };
+      const result = await parcelsCollections.updateOne(
+        { _id: new ObjectId(id) },
+        updateDoc
+      );
+      res.send(result);
+    });
+    app.patch("/parcels/assign/:id", async (req, res) => {
+      const id = req.params.id;
+      const {
+        assigned_rider,
+        delivery_status,
+        assigned_rider_id,
+        assigned_rider_name,
+      } = req.body;
+
+      const updateDoc = {
+        $set: {
+          assigned_rider,
+          delivery_status,
+          assigned_rider_id,
+          assigned_rider_name,
+        },
+      };
+
+      const result = await parcelsCollections.updateOne(
+        { _id: new ObjectId(id) },
+        updateDoc
+      );
+
+      res.send(result);
+    });
+
     // parcel payment page a get a single data
     app.get("/parcels/:id", async (req, res) => {
       const id = req.params.id;
@@ -404,29 +480,6 @@ async function run() {
       }
     });
     // test
-    app.patch("/parcels/assign/:id", async (req, res) => {
-      const id = req.params.id;
-      const {
-        assigned_rider,
-        delivery_status,
-        assigned_rider_id,
-        assigned_rider_name,
-      } = req.body;
-      const result = await parcelsCollections.updateOne(
-        { _id: new ObjectId(id) },
-        {
-          $set: {
-            assigned_rider,
-            delivery_status,
-            assigned_rider_id,
-            assigned_rider_name,
-            assigned_date: new Date(),
-          },
-        }
-      );
-      console.log(result);
-      res.send(result);
-    });
 
     // deploy to comment this
     await client.connect();
