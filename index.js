@@ -116,7 +116,7 @@ async function run() {
         res.status(500).send({ message: "Server error", error: err.message });
       }
     });
-    // cash out routes here
+    // cash out routes here add
     app.patch("/parcels/cashOut/:id", async (req, res) => {
       const id = req.params.id;
       const { cashOut } = req.body;
