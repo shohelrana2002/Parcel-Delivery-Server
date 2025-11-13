@@ -75,6 +75,22 @@ const emailVerify = (req, res, next) => {
 };
 async function run() {
   try {
+    app.get("/parcels/delivery", async (req, res) => {
+      const { email, delivery_status } = req.query;
+
+      const query = {};
+      if (email) query.assigned_rider = email; // যদি assigned_rider field থাকে
+      if (delivery_status) query.delivery_status = delivery_status;
+
+      try {
+        const result = await parcelsCollections.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Server error", error: error.message });
+      }
+    });
+
     app.get("/rider/parcels", async (req, res) => {
       const email = req.query.email;
       const query = {
@@ -100,7 +116,21 @@ async function run() {
         res.status(500).send({ message: "Server error", error: err.message });
       }
     });
-
+    // cash out routes here
+    app.patch("/parcels/cashOut/:id", async (req, res) => {
+      const id = req.params.id;
+      const { cashOut } = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          cash_ot_amount: cashOut,
+          cash_out_status: "cashOut",
+          cash_out_at: new Date().toDateString(),
+        },
+      };
+      const result = await parcelsCollections.updateOne(query, updateDoc);
+      res.send(result);
+    });
     // user post route
     app.post("/users", async (req, res) => {
       const email = req.body.email;
@@ -167,29 +197,7 @@ async function run() {
           .send({ message: "Failed to delete", error: err.message });
       }
     });
-    // app.patch("/parcels/assign/:id", async (req, res) => {
-    //   const id = req.params.id;
-    //   const {
-    //     assigned_rider,
-    //     delivery_status,
-    //     assigned_rider_id,
-    //     assigned_rider_name,
-    //   } = req.body;
-    //   const result = await parcelsCollections.updateOne(
-    //     { _id: new ObjectId(id) },
-    //     {
-    //       $set: {
-    //         assigned_rider,
-    //         delivery_status,
-    //         assigned_rider_id,
-    //         assigned_rider_name,
-    //         assigned_date: new Date(),
-    //       },
-    //     }
-    //   );
 
-    //   res.send(result);
-    // });
     app.patch("/parcels/assign/statusUpdate/:id", async (req, res) => {
       const id = req.params.id;
       const { delivery_status } = req.body;
