@@ -123,7 +123,7 @@ async function run() {
       const query = { _id: new ObjectId(id) };
       const updateDoc = {
         $set: {
-          cash_ot_amount: cashOut,
+          cash_out_amount: cashOut,
           cash_out_status: "cashOut",
           cash_out_at: new Date().toDateString(),
         },
