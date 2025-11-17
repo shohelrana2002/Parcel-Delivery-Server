@@ -248,6 +248,28 @@ async function run() {
       const result = await parcelsCollections.findOne(query);
       res.send(result);
     });
+    // parcels delivery status
+    app.get("/parcels/delivery/status", async (req, res) => {
+      const pipeline = [
+        {
+          $group: {
+            _id: "$delivery_status",
+            count: {
+              $sum: 1,
+            },
+          },
+        },
+        {
+          $project: {
+            status: "$_id",
+            count: 1,
+            _id: 0,
+          },
+        },
+      ];
+      const result = await parcelsCollections.aggregate(pipeline).toArray();
+      res.send(result);
+    });
     // parcel payment
     app.post("/create-payment-intent", async (req, res) => {
       try {
