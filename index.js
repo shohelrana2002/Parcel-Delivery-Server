@@ -32,6 +32,7 @@ const paymentCollections = client.db("Parcels").collection("Payments");
 const trackingCollections = client.db("Parcels").collection("Trackings");
 const usersCollections = client.db("Parcels").collection("Users");
 const ridersCollections = client.db("Parcels").collection("Riders");
+const trackingsCollections = client.db("Parcels").collection("Trackings");
 // middle were
 const verifyFirebaseToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -263,6 +264,21 @@ async function run() {
       } catch (error) {
         res.status(500).send({ error: error.message });
       }
+    });
+    // parcel tracking
+    app.get("/trackings/:trackingsId", async (req, res) => {
+      const trackingId = req.params.trackingsId;
+      const result = await trackingCollections
+        .find({ trackingId: trackingId })
+        .sort({ timestamp: 1 })
+        .toArray();
+      res.send(result);
+    });
+    app.post("/trackings", async (req, res) => {
+      const update = req.body;
+      update.timestamp = new Date().toISOString();
+      const result = await trackingsCollections.insertOne(update);
+      res.send(result);
     });
     // payments data get
     app.get("/payments", verifyFirebaseToken, emailVerify, async (req, res) => {
